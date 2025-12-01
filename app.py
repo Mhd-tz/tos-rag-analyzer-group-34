@@ -11,7 +11,7 @@ import os
 # ============================================
 st.set_page_config(
     page_title="ToS Analyzer - Free Edition",
-    page_icon="🤗",
+    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,9 +27,15 @@ st.markdown("""
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
+        display: inline-block;
+    }
+    .emoji-header {
+        font-size: 3rem;
+        vertical-align: bottom;
     }
     .disclaimer {
         background-color: #fff3cd;
+        color: #856404; /* Dark yellow/brown text for readability */
         padding: 1rem;
         border-radius: 0.5rem;
         border-left: 4px solid #ffc107;
@@ -38,6 +44,10 @@ st.markdown("""
     .stExpander {
         background-color: #f8f9fa;
         border-radius: 0.5rem;
+        color: #000;
+    }
+    h1 {
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -45,7 +55,13 @@ st.markdown("""
 # ============================================
 # HEADER
 # ============================================
-st.markdown('<div class="main-header">🤗 ToS Analyzer</div>', unsafe_allow_html=True)
+st.markdown("""
+<div style='text-align: center;'>
+    <span class='emoji-header'>⚖️</span> 
+    <span class='main-header'>ToS Analyzer</span>
+</div>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <div style='text-align: center; margin-bottom: 2rem;'>
     <p style='font-size: 1.2rem;'>Understand Terms of Service in Plain English</p>
@@ -154,10 +170,11 @@ def load_embeddings():
 def load_vectordb(_embeddings):
     """Load FAISS vector database"""
     try:
+        # FIXED: Removed 'allow_dangerous_deserialization=True' 
+        # This argument is not needed for the older LangChain version you are using.
         vectorstore = FAISS.load_local(
             "faiss_index_tos_hf",
-            _embeddings,
-            allow_dangerous_deserialization=True
+            _embeddings
         )
         return vectorstore
     except Exception as e:
