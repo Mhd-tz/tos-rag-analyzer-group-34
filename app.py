@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.llms import HuggingFaceHub
+from langchain_community.llms import HuggingFaceEndpoint
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 import os
@@ -184,15 +184,15 @@ def load_vectordb(_embeddings):
 
 @st.cache_resource
 def load_llm():
-    """Load Hugging Face LLM"""
-    return HuggingFaceHub(
+    """Load Hugging Face LLM (Endpoint Version)"""
+    # We use HuggingFaceEndpoint because it handles the JSON response correctly
+    return HuggingFaceEndpoint(
         repo_id="mistralai/Mistral-7B-Instruct-v0.2",
-        model_kwargs={
-            "temperature": 0.1,
-            "max_new_tokens": 512,
-            "top_p": 0.95,
-            "repetition_penalty": 1.1
-        }
+        temperature=0.1,
+        max_new_tokens=512,
+        top_p=0.95,
+        repetition_penalty=1.1,
+        huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
     )
 
 # Check if token is provided
