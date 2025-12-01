@@ -185,14 +185,21 @@ def load_vectordb(_embeddings):
 @st.cache_resource
 def load_llm():
     """Load Hugging Face LLM (Endpoint Version)"""
-    # We use HuggingFaceEndpoint because it handles the JSON response correctly
+    repo_id = "mistralai/Mistral-7B-Instruct-v0.2"
+    # The older library needs a full URL, not just the ID
+    endpoint_url = f"https://api-inference.huggingface.co/models/{repo_id}"
+    
+    # We use 'endpoint_url' and pack params into 'model_kwargs'
     return HuggingFaceEndpoint(
-        repo_id="mistralai/Mistral-7B-Instruct-v0.2",
-        temperature=0.1,
-        max_new_tokens=512,
-        top_p=0.95,
-        repetition_penalty=1.1,
-        huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"]
+        endpoint_url=endpoint_url,
+        huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API_TOKEN"],
+        task="text-generation",
+        model_kwargs={
+            "max_new_tokens": 512,
+            "temperature": 0.1,
+            "top_p": 0.95,
+            "repetition_penalty": 1.1
+        }
     )
 
 # Check if token is provided
