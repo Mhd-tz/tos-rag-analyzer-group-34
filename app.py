@@ -187,7 +187,7 @@ def load_llm():
     """Load Hugging Face LLM (Endpoint Version)"""
     repo_id = "mistralai/Mistral-7B-Instruct-v0.2"
     # The older library needs a full URL, not just the ID
-    endpoint_url = f"https://api-inference.huggingface.co/models/{repo_id}"
+    endpoint_url = f"https://router.huggingface.co/models/{repo_id}"
     
     # We use 'endpoint_url' and pack params into 'model_kwargs'
     return HuggingFaceEndpoint(
