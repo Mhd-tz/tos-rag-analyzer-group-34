@@ -5,6 +5,9 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI 
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
+import requests
+from bs4 import BeautifulSoup
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # ============================================
 # PAGE CONFIGURATION
@@ -250,7 +253,7 @@ qa_chain = RetrievalQA.from_chain_type(
 # MAIN INTERFACE
 # ============================================
 
-tabs = st.tabs(["💬 Ask Questions", "🔍 Common Concerns", "📊 About"])
+tabs = st.tabs(["💬 Ask Questions", "🧪 Live Test", "🔍 Common Concerns", "📊 About"])
 
 # TAB 1: Question Answering
 with tabs[0]:
@@ -329,8 +332,94 @@ with tabs[0]:
                 st.error(f"❌ Error: {e}")
                 st.info("💡 Check that your OpenAI API key is valid and has credits")
 
-# TAB 2: Common Concerns
+# TAB 2: Live Test
 with tabs[1]:
+    st.header("🧪 Live Policy Analysis")
+    st.markdown("Test the model on *new* data by providing a URL or pasting text.")
+    
+    # Session state for temporary DB
+    if 'temp_db' not in st.session_state:
+        st.session_state.temp_db = None
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        input_method = st.radio("Input Method", ["URL", "Paste Text"])
+    
+    policy_text = ""
+    
+    if input_method == "URL":
+        url = st.text_input("Enter Privacy Policy URL", placeholder="https://example.com/privacy")
+        if st.button("Fetch & Process URL"):
+            if url:
+                with st.spinner(f"Fetching {url}..."):
+                    try:
+                        response = requests.get(url, timeout=10)
+                        soup = BeautifulSoup(response.content, 'html.parser')
+                        # Remove script and style elements
+                        for script in soup(["script", "style"]):
+                            script.decompose()
+                        policy_text = soup.get_text(separator='\n')
+                        st.success("✅ Content fetched successfully!")
+                    except Exception as e:
+                        st.error(f"❌ Error fetching URL: {e}")
+            else:
+                st.warning("Please enter a URL")
+    else:
+        policy_text = st.text_area("Paste Policy Text", height=200, placeholder="Paste the full text of a privacy policy here...")
+        if st.button("Process Text"):
+            pass # Trigger processing below
+
+    if policy_text:
+        with st.spinner("🧠 Processing and Indexing..."):
+            try:
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000,
+                    chunk_overlap=200
+                )
+                chunks = text_splitter.split_text(policy_text)
+                
+                # Create temporary FAISS index
+                st.session_state.temp_db = FAISS.from_texts(chunks, embeddings)
+                st.success(f"✅ Indexed {len(chunks)} chunks from new policy!")
+            except Exception as e:
+                st.error(f"❌ Error processing text: {e}")
+
+    st.markdown("---")
+    
+    if st.session_state.temp_db:
+        st.subheader("Ask about this specific policy")
+        live_question = st.text_input("Question", placeholder="Does this policy allow data selling?", key="live_q")
+        
+        if live_question:
+            with st.spinner("Analyzing..."):
+                try:
+                    # Create a temporary chain
+                    live_qa_chain = RetrievalQA.from_chain_type(
+                        llm=llm,
+                        chain_type="stuff",
+                        retriever=st.session_state.temp_db.as_retriever(search_kwargs={"k": 4}),
+                        chain_type_kwargs={"prompt": PROMPT},
+                        return_source_documents=True
+                    )
+                    
+                    result = live_qa_chain.invoke({"query": live_question})
+                    
+                    st.markdown("### 🤖 Analysis Result")
+                    st.markdown(result['result'])
+                    
+                    with st.expander("📄 View Source Excerpts"):
+                        for i, doc in enumerate(result['source_documents'], 1):
+                            st.markdown(f"**Excerpt {i}:**")
+                            st.text(doc.page_content)
+                            st.markdown("---")
+                            
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    else:
+        st.info("👆 Process a policy above to start asking questions.")
+
+# TAB 3: Common Concerns
+with tabs[2]:
     st.header("🔍 Common Privacy Concerns")
     st.markdown("*Pre-built analysis of frequently asked privacy questions*")
     
@@ -371,8 +460,8 @@ with tabs[1]:
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# TAB 3: About
-with tabs[2]:
+# TAB 4: About
+with tabs[3]:
     st.header("📊 Project Information")
     
     col1, col2, col3 = st.columns(3)
