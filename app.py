@@ -2,9 +2,13 @@ import streamlit as st
 import os
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI 
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
+from langchain.llms.base import LLM
+from typing import Any, List, Optional, Mapping
+from huggingface_hub import InferenceClient
 import requests
 from bs4 import BeautifulSoup
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -81,22 +85,51 @@ st.markdown("""
 with st.sidebar:
     st.header("🔑 Authentication")
     
-    st.markdown("""
-    **Get your OpenAI API Key:**
-    1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-    2. Create new secret key
-    3. Paste below
+    # Model Selection
+    model_provider = st.radio(
+        "Select Model Provider:",
+        ["OpenAI (Recommended)", "Hugging Face (Free)"],
+        help="OpenAI is faster/smarter. Hugging Face is free but slower."
+    )
     
-    *New accounts get $5 free credit*
-    """)
+    api_key = ""
     
-    api_key = st.text_input("OpenAI API Key", type="password")
-    
-    if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
-        st.success("✅ Connected to OpenAI!")
-    else:
-        st.warning("⚠️ Waiting for API Key...")
+    if model_provider == "OpenAI (Recommended)":
+        st.markdown("""
+        **Get your OpenAI API Key:**
+        1. Go to [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+        2. Create new secret key
+        3. Paste below
+        """)
+        api_key = st.text_input("OpenAI API Key", type="password")
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+            st.success("✅ Connected to OpenAI!")
+        else:
+            st.warning("⚠️ Waiting for API Key...")
+            
+    else: # Hugging Face
+        st.markdown("""
+        **Get your Hugging Face Token:**
+        1. Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+        2. Create new token (Read access)
+        3. Paste below
+        """)
+        api_key = st.text_input("Hugging Face Token", type="password")
+        if api_key:
+            os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
+            st.success("✅ Connected to Hugging Face!")
+        else:
+            st.warning("⚠️ Waiting for Token...")
+            
+        hf_model_id = st.selectbox(
+            "Select Free Model:",
+            [
+                "HuggingFaceH4/zephyr-7b-beta",
+                "mistralai/Mistral-7B-Instruct-v0.2",
+                "google/flan-t5-xxl"
+            ]
+        )
     
     st.markdown("---")
     
@@ -116,8 +149,10 @@ with st.sidebar:
     **Hybrid Approach:**
     - 🔍 **Embeddings**: all-MiniLM-L6-v2  
       *(Hugging Face - Free)*
-    - 🧠 **LLM**: GPT-3.5-Turbo  
-      *(OpenAI - ~$0.002/query)*
+    - 🔍 **Embeddings**: all-MiniLM-L6-v2  
+      *(Hugging Face - Free)*
+    - 🧠 **LLM**: {model_provider.split(' ')[0]}  
+      *({model_provider})*
     - 💾 **Vector DB**: FAISS  
       *(3,929 chunks)*
     - 📚 **Data**: OPP-115 Corpus  
@@ -139,6 +174,50 @@ with st.sidebar:
         
         **For 100 test queries: ~$0.14**
         """)
+
+# ============================================
+# CUSTOM LLM WRAPPER
+# ============================================
+class CustomHuggingFaceLLM(LLM):
+    repo_id: str
+    token: str
+    temperature: float = 0.1
+    max_new_tokens: int = 512
+    
+    @property
+    def _llm_type(self) -> str:
+        return "custom_huggingface"
+
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> str:
+        client = InferenceClient(
+            model=self.repo_id,
+            token=self.token
+        )
+        
+        # Using the chat completion API as requested/suggested
+        messages = [{"role": "user", "content": prompt}]
+        
+        try:
+            response = client.chat.completions.create(
+                model=self.repo_id,
+                messages=messages,
+                max_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+                stream=False
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error calling Hugging Face API: {e}"
+
+    @property
+    def _identifying_params(self) -> Mapping[str, Any]:
+        return {"repo_id": self.repo_id}
 
 # ============================================
 # LOAD MODELS
@@ -173,18 +252,11 @@ if not api_key:
     st.info("""
     ### 🔑 API Key Required
     
-    This app uses OpenAI's GPT-3.5-turbo for high-quality legal analysis.
+    Please provide an API key for the selected provider to proceed.
     
-    **Setup Steps:**
-    1. Go to https://platform.openai.com/api-keys
-    2. Create a new API key (free $5 credit for new accounts)
-    3. Paste it in the sidebar
-    
-    **Why OpenAI instead of free models?**
-    - Better accuracy for legal interpretation
-    - Faster response times
-    - More reliable for demonstrations
-    - Total project cost: ~$2-3
+    **Why do I need this?**
+    - **OpenAI**: Requires a paid key (cheap, high quality).
+    - **Hugging Face**: Requires a free token (slower, free).
     """)
     st.stop()
 
@@ -196,12 +268,20 @@ with st.spinner("🔄 Loading AI models..."):
     if db is None:
         st.stop()
 
-    # Load OpenAI LLM
-    llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
-        temperature=0.1,  # Low temperature for factual responses
-        max_tokens=600    # Enough for detailed answers
-    )
+    # Load LLM based on selection
+    if model_provider == "OpenAI (Recommended)":
+        llm = ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            temperature=0.1,
+            max_tokens=600
+        )
+    else:
+        llm = CustomHuggingFaceLLM(
+            repo_id=hf_model_id,
+            token=os.environ["HUGGINGFACEHUB_API_TOKEN"],
+            temperature=0.1,
+            max_new_tokens=512
+        )
 
 st.success(f"✅ System Ready! Knowledge Base: {db.index.ntotal:,} policy chunks loaded")
 
@@ -330,7 +410,7 @@ with tabs[0]:
                         
             except Exception as e:
                 st.error(f"❌ Error: {e}")
-                st.info("💡 Check that your OpenAI API key is valid and has credits")
+                st.info("💡 Check that your API key/token is valid")
 
 # TAB 2: Live Test
 with tabs[1]:
