@@ -12,6 +12,21 @@ from huggingface_hub import InferenceClient
 import requests
 from bs4 import BeautifulSoup
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import pydantic.v1.main
+
+# ============================================
+# MONKEYPATCH: Fix Pydantic v1/v2 Compatibility
+# ============================================
+# This fixes "KeyError: '__fields_set__'" when loading FAISS index
+# created with Pydantic v2 in an environment using Pydantic v1.
+original_setstate = pydantic.v1.main.BaseModel.__setstate__
+
+def patched_setstate(self, state):
+    if '__fields_set__' not in state:
+        state['__fields_set__'] = set(state.keys())
+    return original_setstate(self, state)
+
+pydantic.v1.main.BaseModel.__setstate__ = patched_setstate
 
 # ============================================
 # PAGE CONFIGURATION
