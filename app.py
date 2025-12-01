@@ -59,7 +59,6 @@ st.markdown("""
 # ============================================
 st.markdown("""
 <div style='text-align: center;'>
-    <span class='emoji-header'>⚖️</span> 
     <span class='main-header'>ToS Analyzer</span>
 </div>
 """, unsafe_allow_html=True)
@@ -83,7 +82,7 @@ st.markdown("""
 # SIDEBAR
 # ============================================
 with st.sidebar:
-    st.header("🔑 Authentication")
+    st.header("Authentication")
     
     # Model Selection
     model_provider = st.radio(
@@ -104,9 +103,9 @@ with st.sidebar:
         api_key = st.text_input("OpenAI API Key", type="password")
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
-            st.success("✅ Connected to OpenAI!")
+            st.success("Connected to OpenAI!")
         else:
-            st.warning("⚠️ Waiting for API Key...")
+            st.warning("Waiting for API Key...")
             
     else: # Hugging Face
         st.markdown("""
@@ -118,9 +117,9 @@ with st.sidebar:
         api_key = st.text_input("Hugging Face Token", type="password")
         if api_key:
             os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
-            st.success("✅ Connected to Hugging Face!")
+            st.success("Connected to Hugging Face!")
         else:
-            st.warning("⚠️ Waiting for Token...")
+            st.warning("Waiting for Token...")
             
         hf_model_id = st.selectbox(
             "Select Free Model:",
@@ -133,7 +132,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.header("⚙️ Settings")
+    st.header("Settings")
     search_depth = st.slider(
         "Search Depth", 
         min_value=2, 
@@ -144,36 +143,23 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.markdown("### 🏗️ Architecture")
+    st.markdown("### Architecture")
     st.markdown("""
     **Hybrid Approach:**
-    - 🔍 **Embeddings**: all-MiniLM-L6-v2  
+    - **Embeddings**: all-MiniLM-L6-v2  
       *(Hugging Face - Free)*
-    - 🔍 **Embeddings**: all-MiniLM-L6-v2  
-      *(Hugging Face - Free)*
-    - 🧠 **LLM**: {model_provider.split(' ')[0]}  
+    - **LLM**: {model_provider.split(' ')[0]}  
       *({model_provider})*
-    - 💾 **Vector DB**: FAISS  
+    - **Vector DB**: FAISS  
       *(3,929 chunks)*
-    - 📚 **Data**: OPP-115 Corpus  
-      *(115 real policies)*
+    - **Data**: OPP-115 Corpus  
+      *(115 Privacy Policies)*
     
     **Why Hybrid?**
-    - ✅ HF embeddings are excellent & free
-    - ✅ GPT-3.5 gives better legal analysis
-    - ✅ Total cost: ~$2-3 for entire project
+    - HF embeddings are excellent & free
+    - GPT-3.5 gives better legal analysis
+    - Total cost: ~$2-3 for entire project
     """)
-    
-    with st.expander("💰 Cost Breakdown"):
-        st.markdown("""
-        **Per Query Estimate:**
-        - Embeddings: $0 (Hugging Face)
-        - Input tokens (~800): $0.0008
-        - Output tokens (~300): $0.0006
-        - **Total: ~$0.0014 per query**
-        
-        **For 100 test queries: ~$0.14**
-        """)
 
 # ============================================
 # CUSTOM LLM WRAPPER
@@ -243,14 +229,14 @@ def load_vectordb(_embeddings):
         )
         return vectorstore
     except Exception as e:
-        st.error(f"❌ Error loading database: {e}")
-        st.info("💡 Make sure 'faiss_index_tos_hf' folder is in the same directory as app.py")
+        st.error(f"Error loading database: {e}")
+        st.info("Make sure 'faiss_index_tos_hf' folder is in the same directory as app.py")
         return None
 
 # Check if API key is provided
 if not api_key:
     st.info("""
-    ### 🔑 API Key Required
+    ### API Key Required
     
     Please provide an API key for the selected provider to proceed.
     
@@ -261,7 +247,7 @@ if not api_key:
     st.stop()
 
 # Load Resources
-with st.spinner("🔄 Loading AI models..."):
+with st.spinner("Loading AI models..."):
     embeddings = load_embeddings()
     db = load_vectordb(embeddings)
     
@@ -333,59 +319,57 @@ qa_chain = RetrievalQA.from_chain_type(
 # MAIN INTERFACE
 # ============================================
 
-tabs = st.tabs(["💬 Ask Questions", "🧪 Live Test", "🔍 Common Concerns", "📊 About"])
+tabs = st.tabs(["Knowledge Base", "Live Analysis", "Common Concerns", "About"])
 
-# TAB 1: Question Answering
+# TAB 1: Knowledge Base
 with tabs[0]:
-    st.header("Ask About Privacy Policies")
+    st.header("Explore the Privacy Policy Landscape")
+    st.markdown("""
+    **Aggregated Industry Insights**
     
-    with st.expander("💡 Example Questions"):
+    This tool analyzes a dataset of **115 different privacy policies** to identify common industry patterns and legal standards.
+    
+    > **Note:** Since the data is aggregated, answers in this tab reflect **general trends** and cannot be attributed to a specific company.
+    > To audit a specific company (like Google or Facebook), please use the **Live Analysis** tab.
+    """)
+    
+    with st.expander("Example Research Questions"):
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("""
-            **Data Collection:**
-            - What personal data do they collect?
-            - Do they track my location?
-            - Can they access my contacts?
-            
-            **Data Usage:**
-            - Can they sell my data?
-            - Do they use my content for AI training?
-            - Do they share data with advertisers?
+            **Industry Trends:**
+            - What is the standard data retention period?
+            - How do companies usually handle arbitration?
+            - Is it common to sell user data?
             """)
         
         with col2:
             st.markdown("""
-            **User Rights:**
-            - Can I delete all my data?
-            - Can I opt out of data collection?
-            - Do I have GDPR rights?
-            
-            **Legal Terms:**
-            - Am I forced into arbitration?
-            - Can they change terms without notice?
-            - What happens if they get hacked?
+            **Legal Standards:**
+            - What are the typical GDPR requirements?
+            - How do policies define 'personal data'?
+            - What are common opt-out mechanisms?
             """)
     
     user_question = st.text_input(
-        "What do you want to know?", 
-        placeholder="e.g., Can this company use my photos for advertising?",
+        "Research the database:", 
+        placeholder="e.g., What is the most common reason for account termination?",
         key="main_question"
     )
     
     if user_question:
-        with st.spinner("🔍 Searching 3,929 policy chunks..."):
+        with st.spinner("Searching 3,929 policy chunks..."):
             try:
                 result = qa_chain.invoke({"query": user_question})
                 
                 # Display answer
-                st.markdown("### 🤖 AI Analysis")
+                st.markdown("### AI Analysis")
                 st.markdown(result['result'])
                 
                 # Show source documents
-                with st.expander("📄 View Source Documents (Click to Verify)"):
-                    st.markdown("*These are the actual policy excerpts used to generate the answer:*")
+                with st.expander("View Source Documents (Click to Verify)"):
+                    st.markdown("These are the actual policy excerpts used to generate the answer:")
                     
                     for i, doc in enumerate(result['source_documents'], 1):
                         st.markdown(f"**Source {i}** (from {doc.metadata.get('source', 'unknown')} set):")
@@ -409,13 +393,13 @@ with tabs[0]:
                         st.info("Try being more specific or rephrasing your question!")
                         
             except Exception as e:
-                st.error(f"❌ Error: {e}")
-                st.info("💡 Check that your API key/token is valid")
+                st.error(f"Error: {e}")
+                st.info("Check that your API key/token is valid")
 
-# TAB 2: Live Test
+# TAB 2: Live Analysis
 with tabs[1]:
-    st.header("🧪 Live Policy Analysis")
-    st.markdown("Test the model on *new* data by providing a URL or pasting text.")
+    st.header("Live Policy Analysis")
+    st.markdown("Paste a URL or text from a specific privacy policy to audit it.")
     
     # Session state for temporary DB
     if 'temp_db' not in st.session_state:
@@ -450,7 +434,7 @@ with tabs[1]:
             pass # Trigger processing below
 
     if policy_text:
-        with st.spinner("🧠 Processing and Indexing..."):
+        with st.spinner("Processing and Indexing..."):
             try:
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=1000,
@@ -500,16 +484,16 @@ with tabs[1]:
 
 # TAB 3: Common Concerns
 with tabs[2]:
-    st.header("🔍 Common Privacy Concerns")
+    st.header("Common Privacy Concerns")
     st.markdown("*Pre-built analysis of frequently asked privacy questions*")
     
     concerns = {
-        "🔴 Data Selling": "Does the policy allow selling personal data to third parties for profit?",
-        "🤖 AI Training": "Can the company use my content, photos, or messages to train AI models?",
-        "⚖️ Forced Arbitration": "Am I forced into binding arbitration instead of suing in court?",
-        "🗑️ Data Deletion": "Can I request complete deletion of all my personal data?",
-        "📊 Third-Party Sharing": "Do they share my information with advertisers or partners?",
-        "⏰ Data Retention": "How long do they keep my personal information?",
+        "Data Selling": "Does the policy allow selling personal data to third parties for profit?",
+        "AI Training": "Can the company use my content, photos, or messages to train AI models?",
+        "Forced Arbitration": "Am I forced into binding arbitration instead of suing in court?",
+        "Data Deletion": "Can I request complete deletion of all my personal data?",
+        "Third-Party Sharing": "Do they share my information with advertisers or partners?",
+        "Data Retention": "How long do they keep my personal information?",
     }
     
     selected_concern = st.selectbox(
@@ -528,7 +512,7 @@ with tabs[2]:
                 st.markdown(f"### {selected_concern}")
                 st.markdown(result['result'])
                 
-                with st.expander("📄 View Sources"):
+                with st.expander("View Sources"):
                     for i, doc in enumerate(result['source_documents'], 1):
                         st.text_area(
                             f"Source {i}",
@@ -542,7 +526,7 @@ with tabs[2]:
 
 # TAB 4: About
 with tabs[3]:
-    st.header("📊 Project Information")
+    st.header("Project Information")
     
     col1, col2, col3 = st.columns(3)
     
@@ -552,20 +536,25 @@ with tabs[3]:
     
     with col2:
         st.metric("Embedding Model", "all-MiniLM-L6-v2")
-        st.metric("LLM Model", "GPT-3.5-turbo")
-    
+        st.metric("Vector DB", "FAISS")
+        
     with col3:
-        st.metric("Vector Database", "FAISS")
-        st.metric("Data Source", "OPP-115")
-    
+        st.metric("LLM Provider", model_provider.split(' ')[0])
+        
     st.markdown("---")
+    st.markdown("""
+    **ToS RAG Analyzer** is an academic project designed to make privacy policies transparent.
+    
+    **Features:**
+    - **RAG Architecture**: Retrieves real policy text to ground answers.
+    - **Dual LLM Support**: Compare OpenAI (Commercial) vs Hugging Face (Open Source).
+    - **Live Analysis**: Audit any policy in real-time.
+    
+    **Created by Group 34** for SFU IAT 360.
+    """)
     
     st.subheader("🎓 Academic Context")
     st.markdown("""
-    **Course**: IAT 360 - Designing the Digital Future  
-    **Institution**: Simon Fraser University  
-    **Project Type**: Option 2 - Deploy Existing Model (RAG)
-    
     **Problem Statement**:  
     91% of users accept Terms of Service without reading them because these documents 
     average 10,000+ words and require college-level reading comprehension.
@@ -604,10 +593,10 @@ with tabs[3]:
     with col1:
         st.markdown("""
         **Known Biases**:
-        - 🇺🇸 US-centric legal frameworks
-        - 🗓️ Dataset from 2019 (may be outdated)
-        - 🌐 English language only
-        - 🏢 Large companies overrepresented
+        - US-centric legal frameworks
+        - Dataset from 2019 (may be outdated)
+        - English language only
+        - Large companies overrepresented
         """)
     
     with col2:
@@ -640,7 +629,7 @@ with tabs[3]:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 2rem;'>
-    <p><strong>⚠️ This tool is for educational purposes only</strong></p>
+    <p><strong>This tool is for educational purposes only</strong></p>
     <p>AI-generated interpretations are NOT legal advice.</p>
     <p style='margin-top: 1.5rem;'>
         <strong>IAT 360 Final Project</strong> • Simon Fraser University<br>
