@@ -45,7 +45,7 @@ st.markdown("""
         font-size: 3rem;
         font-weight: bold;
         text-align: center;
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(90deg, #FF512F 0%, #DD2476 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
@@ -115,7 +115,14 @@ with st.sidebar:
         2. Create new secret key
         3. Paste below
         """)
-        api_key = st.text_input("OpenAI API Key", type="password")
+        with st.form("openai_key_form"):
+            api_key_input = st.text_input("OpenAI API Key", type="password")
+            submitted = st.form_submit_button("Connect")
+            if submitted:
+                api_key = api_key_input
+            elif os.environ.get("OPENAI_API_KEY"):
+                api_key = os.environ["OPENAI_API_KEY"]
+                
         if api_key:
             os.environ["OPENAI_API_KEY"] = api_key
             st.success("Connected to OpenAI!")
@@ -129,7 +136,14 @@ with st.sidebar:
         2. Create new token (Read access)
         3. Paste below
         """)
-        api_key = st.text_input("Hugging Face Token", type="password")
+        with st.form("hf_token_form"):
+            api_key_input = st.text_input("Hugging Face Token", type="password")
+            submitted = st.form_submit_button("Connect")
+            if submitted:
+                api_key = api_key_input
+            elif os.environ.get("HUGGINGFACEHUB_API_TOKEN"):
+                api_key = os.environ["HUGGINGFACEHUB_API_TOKEN"]
+
         if api_key:
             os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
             st.success("Connected to Hugging Face!")
@@ -139,9 +153,8 @@ with st.sidebar:
         hf_model_id = st.selectbox(
             "Select Free Model:",
             [
-                "HuggingFaceH4/zephyr-7b-beta",
                 "mistralai/Mistral-7B-Instruct-v0.2",
-                "google/flan-t5-xxl"
+                "HuggingFaceH4/zephyr-7b-beta"
             ]
         )
     
@@ -159,14 +172,14 @@ with st.sidebar:
     st.markdown("---")
     
     st.markdown("### Architecture")
-    st.markdown("""
+    st.markdown(f"""
     **Hybrid Approach:**
     - **Embeddings**: all-MiniLM-L6-v2  
       *(Hugging Face - Free)*
     - **LLM**: {model_provider.split(' ')[0]}  
       *({model_provider})*
     - **Vector DB**: FAISS  
-      *(3,929 chunks)*
+      *(343,120 chunks)*
     - **Data**: OPP-115 Corpus  
       *(115 Privacy Policies)*
     
@@ -334,10 +347,111 @@ qa_chain = RetrievalQA.from_chain_type(
 # MAIN INTERFACE
 # ============================================
 
-tabs = st.tabs(["Knowledge Base", "Live Analysis", "Common Concerns", "About"])
+tabs = st.tabs(["Live Analysis", "Knowledge Base", "Common Concerns", "About"])
 
-# TAB 1: Knowledge Base
+# TAB 1: Live Analysis
 with tabs[0]:
+    st.header("Live Policy Analysis")
+    st.markdown("Paste a URL or text from a specific privacy policy to audit it.")
+    
+    # Session state for temporary DB
+    if 'temp_db' not in st.session_state:
+        st.session_state.temp_db = None
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        input_method = st.radio("Input Method", ["URL", "Paste Text"])
+    
+    policy_text = ""
+    
+    if input_method == "URL":
+        with st.form("url_form"):
+            url = st.text_input("Enter Privacy Policy URL", placeholder="https://example.com/privacy")
+            submitted = st.form_submit_button("Fetch & Process URL")
+            
+            if submitted:
+                if url:
+                    with st.spinner(f"Fetching {url}..."):
+                        try:
+                            response = requests.get(url, timeout=10)
+                            soup = BeautifulSoup(response.content, 'html.parser')
+                            # Remove script and style elements
+                            for script in soup(["script", "style"]):
+                                script.decompose()
+                            policy_text = soup.get_text(separator='\n')
+                            st.success("✅ Content fetched successfully!")
+                            # Store in session state to persist after reload
+                            st.session_state.policy_text = policy_text
+                        except Exception as e:
+                            st.error(f"❌ Error fetching URL: {e}")
+                else:
+                    st.warning("Please enter a URL")
+    else:
+        with st.form("text_form"):
+            raw_text = st.text_area("Paste Policy Text", height=200, placeholder="Paste the full text of a privacy policy here...")
+            submitted = st.form_submit_button("Process Text")
+            if submitted:
+                policy_text = raw_text
+                st.session_state.policy_text = policy_text
+
+    # Check if we have policy text in session state (from form submission)
+    if 'policy_text' in st.session_state and st.session_state.policy_text:
+        policy_text = st.session_state.policy_text
+
+    if policy_text and (not st.session_state.temp_db or 'last_policy' not in st.session_state or st.session_state.last_policy != policy_text[:50]):
+        with st.spinner("Processing and Indexing..."):
+            try:
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=1000,
+                    chunk_overlap=200
+                )
+                chunks = text_splitter.split_text(policy_text)
+                
+                # Create temporary FAISS index
+                st.session_state.temp_db = FAISS.from_texts(chunks, embeddings)
+                st.session_state.last_policy = policy_text[:50] # Marker to avoid re-indexing
+                st.success(f"✅ Indexed {len(chunks)} chunks from new policy!")
+            except Exception as e:
+                st.error(f"❌ Error processing text: {e}")
+
+    st.markdown("---")
+    
+    if st.session_state.temp_db:
+        st.subheader("Ask about this specific policy")
+        with st.form("live_q_form"):
+            live_question = st.text_input("Question", placeholder="Does this policy allow data selling?", key="live_q")
+            submitted = st.form_submit_button("Ask AI")
+            
+            if submitted and live_question:
+                with st.spinner("Analyzing..."):
+                    try:
+                        # Create a temporary chain
+                        live_qa_chain = RetrievalQA.from_chain_type(
+                            llm=llm,
+                            chain_type="stuff",
+                            retriever=st.session_state.temp_db.as_retriever(search_kwargs={"k": 4}),
+                            chain_type_kwargs={"prompt": PROMPT},
+                            return_source_documents=True
+                        )
+                        
+                        result = live_qa_chain.invoke({"query": live_question})
+                        
+                        st.markdown("### 🤖 Analysis Result")
+                        st.markdown(result['result'])
+                        
+                        with st.expander("📄 View Source Excerpts"):
+                            for i, doc in enumerate(result['source_documents'], 1):
+                                st.markdown(f"**Excerpt {i}:**")
+                                st.text(doc.page_content)
+                                st.markdown("---")
+                                
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+    else:
+        st.info("👆 Process a policy above to start asking questions.")
+
+# TAB 2: Knowledge Base
+with tabs[1]:
     st.header("Explore the Privacy Policy Landscape")
     st.markdown("""
     **Aggregated Industry Insights**
@@ -367,13 +481,15 @@ with tabs[0]:
             - What are common opt-out mechanisms?
             """)
     
-    user_question = st.text_input(
-        "Research the database:", 
-        placeholder="e.g., What is the most common reason for account termination?",
-        key="main_question"
-    )
+    with st.form("kb_form"):
+        user_question = st.text_input(
+            "Research the database:", 
+            placeholder="e.g., What is the most common reason for account termination?",
+            key="main_question"
+        )
+        submitted = st.form_submit_button("Search Database")
     
-    if user_question:
+    if submitted and user_question:
         with st.spinner("Searching 3,929 policy chunks..."):
             try:
                 result = qa_chain.invoke({"query": user_question})
@@ -410,92 +526,6 @@ with tabs[0]:
             except Exception as e:
                 st.error(f"Error: {e}")
                 st.info("Check that your API key/token is valid")
-
-# TAB 2: Live Analysis
-with tabs[1]:
-    st.header("Live Policy Analysis")
-    st.markdown("Paste a URL or text from a specific privacy policy to audit it.")
-    
-    # Session state for temporary DB
-    if 'temp_db' not in st.session_state:
-        st.session_state.temp_db = None
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        input_method = st.radio("Input Method", ["URL", "Paste Text"])
-    
-    policy_text = ""
-    
-    if input_method == "URL":
-        url = st.text_input("Enter Privacy Policy URL", placeholder="https://example.com/privacy")
-        if st.button("Fetch & Process URL"):
-            if url:
-                with st.spinner(f"Fetching {url}..."):
-                    try:
-                        response = requests.get(url, timeout=10)
-                        soup = BeautifulSoup(response.content, 'html.parser')
-                        # Remove script and style elements
-                        for script in soup(["script", "style"]):
-                            script.decompose()
-                        policy_text = soup.get_text(separator='\n')
-                        st.success("✅ Content fetched successfully!")
-                    except Exception as e:
-                        st.error(f"❌ Error fetching URL: {e}")
-            else:
-                st.warning("Please enter a URL")
-    else:
-        policy_text = st.text_area("Paste Policy Text", height=200, placeholder="Paste the full text of a privacy policy here...")
-        if st.button("Process Text"):
-            pass # Trigger processing below
-
-    if policy_text:
-        with st.spinner("Processing and Indexing..."):
-            try:
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=1000,
-                    chunk_overlap=200
-                )
-                chunks = text_splitter.split_text(policy_text)
-                
-                # Create temporary FAISS index
-                st.session_state.temp_db = FAISS.from_texts(chunks, embeddings)
-                st.success(f"✅ Indexed {len(chunks)} chunks from new policy!")
-            except Exception as e:
-                st.error(f"❌ Error processing text: {e}")
-
-    st.markdown("---")
-    
-    if st.session_state.temp_db:
-        st.subheader("Ask about this specific policy")
-        live_question = st.text_input("Question", placeholder="Does this policy allow data selling?", key="live_q")
-        
-        if live_question:
-            with st.spinner("Analyzing..."):
-                try:
-                    # Create a temporary chain
-                    live_qa_chain = RetrievalQA.from_chain_type(
-                        llm=llm,
-                        chain_type="stuff",
-                        retriever=st.session_state.temp_db.as_retriever(search_kwargs={"k": 4}),
-                        chain_type_kwargs={"prompt": PROMPT},
-                        return_source_documents=True
-                    )
-                    
-                    result = live_qa_chain.invoke({"query": live_question})
-                    
-                    st.markdown("### 🤖 Analysis Result")
-                    st.markdown(result['result'])
-                    
-                    with st.expander("📄 View Source Excerpts"):
-                        for i, doc in enumerate(result['source_documents'], 1):
-                            st.markdown(f"**Excerpt {i}:**")
-                            st.text(doc.page_content)
-                            st.markdown("---")
-                            
-                except Exception as e:
-                    st.error(f"Error: {e}")
-    else:
-        st.info("👆 Process a policy above to start asking questions.")
 
 # TAB 3: Common Concerns
 with tabs[2]:
@@ -546,8 +576,8 @@ with tabs[3]:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Total Policies", "115")
-        st.metric("Policy Chunks", "3,929")
+        st.metric("Total Policies", ">115")
+        st.metric("Policy Chunks", "343,120")
     
     with col2:
         st.metric("Embedding Model", "all-MiniLM-L6-v2")
@@ -568,7 +598,7 @@ with tabs[3]:
     **Created by Group 34** for SFU IAT 360.
     """)
     
-    st.subheader("🎓 Academic Context")
+    st.subheader("Academic Context")
     st.markdown("""
     **Problem Statement**:  
     91% of users accept Terms of Service without reading them because these documents 
@@ -581,7 +611,7 @@ with tabs[3]:
     
     st.markdown("---")
     
-    st.subheader("🏗️ Technical Architecture")
+    st.subheader("Technical Architecture")
     st.markdown("""
     **Hybrid RAG Pipeline**:
 ```
@@ -601,41 +631,12 @@ with tabs[3]:
     
     st.markdown("---")
     
-    st.subheader("⚖️ Ethical Considerations")
+    st.subheader("Ethical Considerations")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **Known Biases**:
-        - US-centric legal frameworks
-        - Dataset from 2019 (may be outdated)
-        - English language only
-        - Large companies overrepresented
-        """)
-    
-    with col2:
-        st.markdown("""
-        **Mitigations**:
-        - ✅ Clear disclaimers throughout UI
-        - ✅ Source citations for verification
-        - ✅ "Not legal advice" warnings
-        - ✅ Encourages reading full policies
-        """)
-    
-    st.markdown("---")
-    
-    st.subheader("📜 Licenses & Attribution")
     st.markdown("""
-    **Models**:
-    - GPT-3.5-turbo: OpenAI (Commercial license)
-    - all-MiniLM-L6-v2: Apache 2.0
+    This project acknowledges several inherent biases in the underlying data and models. The dataset primarily consists of privacy policies from major US-based technology companies, which may not reflect global legal standards or the practices of smaller organizations. Additionally, the data was collected around 2016-2019, meaning it may not fully capture recent regulatory changes like GDPR or CCPA in all instances.
     
-    **Data**:
-    - OPP-115 Corpus: Wilson et al. (2016) - Academic use permitted
-    
-    **Code**:
-    - MIT License (educational project)
+    To mitigate these risks, the application includes clear disclaimers that the AI-generated content is not legal advice. We explicitly encourage users to verify findings against the original policy text, which is always provided alongside the analysis. The goal is to augment human understanding, not replace professional legal counsel.
     """)
 
 # ============================================
