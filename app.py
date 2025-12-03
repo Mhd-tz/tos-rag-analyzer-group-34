@@ -15,7 +15,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 import pydantic.v1.main
 
 # ============================================
-# MONKEYPATCH: Fix Pydantic v1/v2 Compatibility
+# Got this fix from: https://github.com/pydantic/pydantic/discussions/6766
 # ============================================
 # This fixes "KeyError: '__fields_set__'" when loading FAISS index
 # created with Pydantic v2 in an environment using Pydantic v1.
