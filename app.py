@@ -10,7 +10,7 @@ from langchain.llms.base import LLM
 from typing import Any, List, Optional, Mapping
 from huggingface_hub import InferenceClient
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # Tutorial used for scraping: https://realpython.com/beautiful-soup-web-scraper-python/
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import pydantic.v1.main
 
@@ -33,7 +33,6 @@ pydantic.v1.main.BaseModel.__setstate__ = patched_setstate
 # ============================================
 st.set_page_config(
     page_title="ToS Analyzer - Hybrid Edition",
-    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -45,9 +44,7 @@ st.markdown("""
         font-size: 3rem;
         font-weight: bold;
         text-align: center;
-        background: linear-gradient(90deg, #FF512F 0%, #DD2476 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #FF512F;
         margin-bottom: 1rem;
         display: inline-block;
     }
@@ -85,11 +82,14 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Disclaimer as we discussed in the our presentation to have a clear understanding of the tool
 st.markdown("""
 <div class="disclaimer">
-    ⚠️ <strong>Important Disclaimer</strong><br>
+    <strong>Important Disclaimer</strong><br>
     This tool provides AI-generated interpretations. It is <strong>NOT legal advice</strong>. 
     Always read the full Terms of Service and consult a qualified attorney for legal decisions.
+    <br>
+    (Disclaimer as we discussed in our presentation to have a clear understanding of the tool)
 </div>
 """, unsafe_allow_html=True)
 
@@ -239,7 +239,7 @@ class CustomHuggingFaceLLM(LLM):
 
 @st.cache_resource
 def load_embeddings():
-    """Load Hugging Face embeddings (FREE & OPEN SOURCE)"""
+    """Load Hugging Face embeddings"""
     return HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         model_kwargs={'device': 'cpu'},
@@ -250,10 +250,11 @@ def load_embeddings():
 def load_vectordb(_embeddings):
     """Load FAISS Database"""
     try:
+        # FAISS setup reference: https://python.langchain.com/docs/integrations/vectorstores/faiss
         vectorstore = FAISS.load_local(
             "faiss_index_tos_hf", 
             _embeddings,
-            allow_dangerous_deserialization=True  # FIXED: Added this parameter
+            allow_dangerous_deserialization=True 
         )
         return vectorstore
     except Exception as e:
@@ -297,11 +298,13 @@ with st.spinner("Loading AI models..."):
             max_new_tokens=512
         )
 
-st.success(f"✅ System Ready! Knowledge Base: {db.index.ntotal:,} policy chunks loaded")
+st.success(f"System Ready! Knowledge Base: {db.index.ntotal:,} policy chunks loaded")
 
 # ============================================
 # RAG CHAIN
 # ============================================
+# Hey team, I made this template for you to use in your RAG chain. You can use it as is or modify it to your liking.
+
 template = """You are a consumer rights advocate and legal expert specializing in translating Terms of Service into plain English.
 
 Your task is to analyze privacy policies and answer questions at an 8th-grade reading level while maintaining complete accuracy.
@@ -335,6 +338,7 @@ PROMPT = PromptTemplate(
     input_variables=["context", "question"]
 )
 
+# RAG implementation guide: https://python.langchain.com/docs/use_cases/question_answering/
 qa_chain = RetrievalQA.from_chain_type(
     llm=llm,
     chain_type="stuff",
@@ -347,7 +351,9 @@ qa_chain = RetrievalQA.from_chain_type(
 # MAIN INTERFACE
 # ============================================
 
-tabs = st.tabs(["Live Analysis", "Knowledge Base", "Common Concerns", "About"])
+# We learned how to implement the frontend using Streamlit by following this tutorial: https://docs.streamlit.io/en/stable/ and https://www.youtube.com/watch?v=8W8NQFFbDcU
+
+tabs = st.tabs(["Live Analysis", "Knowledge Base", "Common Concerns", "About", "Resources"])
 
 # TAB 1: Live Analysis
 with tabs[0]:
@@ -379,11 +385,11 @@ with tabs[0]:
                             for script in soup(["script", "style"]):
                                 script.decompose()
                             policy_text = soup.get_text(separator='\n')
-                            st.success("✅ Content fetched successfully!")
+                            st.success("Content fetched successfully!")
                             # Store in session state to persist after reload
                             st.session_state.policy_text = policy_text
                         except Exception as e:
-                            st.error(f"❌ Error fetching URL: {e}")
+                            st.error(f"Error fetching URL: {e}")
                 else:
                     st.warning("Please enter a URL")
     else:
@@ -410,9 +416,9 @@ with tabs[0]:
                 # Create temporary FAISS index
                 st.session_state.temp_db = FAISS.from_texts(chunks, embeddings)
                 st.session_state.last_policy = policy_text[:50] # Marker to avoid re-indexing
-                st.success(f"✅ Indexed {len(chunks)} chunks from new policy!")
+                st.success(f"Indexed {len(chunks)} chunks from new policy!")
             except Exception as e:
-                st.error(f"❌ Error processing text: {e}")
+                st.error(f"Error processing text: {e}")
 
     st.markdown("---")
     
@@ -448,7 +454,7 @@ with tabs[0]:
                     except Exception as e:
                         st.error(f"Error: {e}")
     else:
-        st.info("👆 Process a policy above to start asking questions.")
+        st.info("Process a policy above to start asking questions.")
 
 # TAB 2: Knowledge Base
 with tabs[1]:
@@ -517,10 +523,10 @@ with tabs[1]:
                 st.markdown("---")
                 col1, col2 = st.columns([1, 4])
                 with col1:
-                    if st.button("👍 Helpful", key="helpful"):
+                    if st.button("Helpful", key="helpful"):
                         st.success("Thanks!")
                 with col2:
-                    if st.button("👎 Not helpful", key="not_helpful"):
+                    if st.button("Not helpful", key="not_helpful"):
                         st.info("Try being more specific or rephrasing your question!")
                         
             except Exception as e:
@@ -547,7 +553,7 @@ with tabs[2]:
         key="concern_select"
     )
     
-    if st.button("🔍 Analyze This Concern", type="primary"):
+    if st.button("Analyze this concern", type="primary"):
         query = concerns[selected_concern]
         
         with st.spinner(f"Analyzing: {selected_concern}"):
@@ -638,6 +644,50 @@ with tabs[3]:
     
     To mitigate these risks, the application includes clear disclaimers that the AI-generated content is not legal advice. We explicitly encourage users to verify findings against the original policy text, which is always provided alongside the analysis. The goal is to augment human understanding, not replace professional legal counsel.
     """)
+
+# TAB 5: Resources
+with tabs[4]:
+    st.header("Project Resources & References")
+    
+    st.markdown("""
+    Here is a collection of resources, libraries, and references used in the development of this application.
+    """)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Development & Tutorials")
+        st.markdown("""
+        - **Streamlit Documentation**:  
+          [docs.streamlit.io](https://docs.streamlit.io/en/stable/)
+        - **Streamlit Tutorial (YouTube)**:  
+          [Building a Data App in Streamlit](https://www.youtube.com/watch?v=8W8NQFFbDcU)
+        - **Pydantic Fix Discussion**:  
+          [GitHub Discussion #6766](https://github.com/pydantic/pydantic/discussions/6766)  
+          *(Solution for Pydantic v1/v2 compatibility issues)*
+        """)
+        
+    with col2:
+        st.subheader("APIs & Tools")
+        st.markdown("""
+        - **OpenAI API Keys**:  
+          [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+        - **Hugging Face Tokens**:  
+          [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+        - **LangChain**:  
+          [python.langchain.com](https://python.langchain.com/docs/get_started/introduction)
+        - **FAISS (Facebook AI Similarity Search)**:  
+          [github.com/facebookresearch/faiss](https://github.com/facebookresearch/faiss)
+        - **Real Python BeautifulSoup Tutorial**:  
+          [realpython.com](https://realpython.com/beautiful-soup-web-scraper-python/)
+        - **LangChain RAG Tutorial**:  
+          [python.langchain.com](https://python.langchain.com/docs/use_cases/question_answering/)
+        - **FAISS Vector Store Guide**:  
+          [python.langchain.com](https://python.langchain.com/docs/integrations/vectorstores/faiss)
+        """)
+    
+    st.markdown("---")
+    st.caption("These resources were instrumental in building the ToS RAG Analyzer.")
 
 # ============================================
 # FOOTER
