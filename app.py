@@ -96,6 +96,36 @@ st.markdown("""
 # ============================================
 # SIDEBAR
 # ============================================
+# ============================================
+# SIDEBAR & AUTHENTICATION
+# ============================================
+def validate_openai_key(key):
+    """Validate OpenAI API Key by making a lightweight request"""
+    try:
+        # Simple check: try to list models (requires valid key)
+        resp = requests.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=5
+        )
+        return resp.status_code == 200
+    except:
+        return False
+
+def validate_hf_token(token):
+    """Validate Hugging Face Token"""
+    try:
+        # Whoami endpoint
+        # Got this fix from: https://discuss.huggingface.co/t/how-do-you-use-the-whoami-endpoint/15830
+        resp = requests.get(
+            "https://huggingface.co/api/whoami-v2",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5
+        )
+        return resp.status_code == 200
+    except:
+        return False
+
 with st.sidebar:
     st.header("Authentication")
     
@@ -103,10 +133,16 @@ with st.sidebar:
     model_provider = st.radio(
         "Select Model Provider:",
         ["OpenAI (Recommended)", "Hugging Face (Free)"],
+        # On change, we can opt to clear previous keys if strict isolation is desired, 
+        # but session_state logic below handles standard separation.
         help="OpenAI is faster/smarter. Hugging Face is free but slower."
     )
     
-    api_key = ""
+    # Initialize session state for keys if not present
+    if "auth_status" not in st.session_state:
+        st.session_state.auth_status = None
+    
+    active_key = None
     
     if model_provider == "OpenAI (Recommended)":
         st.markdown("""
@@ -115,19 +151,28 @@ with st.sidebar:
         2. Create new secret key
         3. Paste below
         """)
-        with st.form("openai_key_form"):
-            api_key_input = st.text_input("OpenAI API Key", type="password")
+        
+        with st.form("openai_auth"):
+            openai_input = st.text_input(
+                "OpenAI API Key", 
+                type="password",
+                value=st.session_state.get("openai_input_val", "")  # Retain input if needed or keep blank
+            )
             submitted = st.form_submit_button("Connect")
+            
             if submitted:
-                api_key = api_key_input
-            elif os.environ.get("OPENAI_API_KEY"):
-                api_key = os.environ["OPENAI_API_KEY"]
-                
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-            st.success("Connected to OpenAI!")
-        else:
-            st.warning("Waiting for API Key...")
+                with st.spinner("Verifying key..."):
+                    if validate_openai_key(openai_input):
+                        st.session_state.openai_key = openai_input
+                        st.session_state.auth_status = "openai_success"
+                    else:
+                        st.session_state.auth_status = "openai_failed"
+                        st.error("Invalid OpenAI API Key")
+
+        # Check if we have a valid key in session
+        if st.session_state.get("auth_status") == "openai_success" and st.session_state.get("openai_key"):
+            active_key = st.session_state.openai_key
+            st.success("OpenAI Connected")
             
     else: # Hugging Face
         st.markdown("""
@@ -136,20 +181,28 @@ with st.sidebar:
         2. Create new token (Read access)
         3. Paste below
         """)
-        with st.form("hf_token_form"):
-            api_key_input = st.text_input("Hugging Face Token", type="password")
+        
+        with st.form("hf_auth"):
+            hf_input = st.text_input(
+                "Hugging Face Token", 
+                type="password", 
+                value=st.session_state.get("hf_input_val", "")
+            )
             submitted = st.form_submit_button("Connect")
-            if submitted:
-                api_key = api_key_input
-            elif os.environ.get("HUGGINGFACEHUB_API_TOKEN"):
-                api_key = os.environ["HUGGINGFACEHUB_API_TOKEN"]
-
-        if api_key:
-            os.environ["HUGGINGFACEHUB_API_TOKEN"] = api_key
-            st.success("Connected to Hugging Face!")
-        else:
-            st.warning("Waiting for Token...")
             
+            if submitted:
+                with st.spinner("Verifying token..."):
+                    if validate_hf_token(hf_input):
+                        st.session_state.hf_token = hf_input
+                        st.session_state.auth_status = "hf_success"
+                    else:
+                        st.session_state.auth_status = "hf_failed"
+                        st.error("Invalid Hugging Face Token")
+                        
+        if st.session_state.get("auth_status") == "hf_success" and st.session_state.get("hf_token"):
+            active_key = st.session_state.hf_token
+            st.success("Hugging Face Connected")
+
         hf_model_id = st.selectbox(
             "Select Free Model:",
             [
@@ -186,7 +239,6 @@ with st.sidebar:
     **Why Hybrid?**
     - HF embeddings are excellent & free
     - GPT-3.5 gives better legal analysis
-    - Total cost: ~$2-3 for entire project
     """)
 
 # ============================================
@@ -263,7 +315,7 @@ def load_vectordb(_embeddings):
         return None
 
 # Check if API key is provided
-if not api_key:
+if not active_key:
     st.info("""
     ### API Key Required
     
@@ -278,6 +330,8 @@ if not api_key:
 # Load Resources
 with st.spinner("Loading AI models..."):
     embeddings = load_embeddings()
+    # Note: load_vectordb is cached, so it won't re-run every time, 
+    # but that's fine as it doesn't depend on keys
     db = load_vectordb(embeddings)
     
     if db is None:
@@ -288,12 +342,13 @@ with st.spinner("Loading AI models..."):
         llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
             temperature=0.1,
-            max_tokens=600
+            max_tokens=600,
+            api_key=active_key # Explicitly pass key
         )
     else:
         llm = CustomHuggingFaceLLM(
             repo_id=hf_model_id,
-            token=os.environ["HUGGINGFACEHUB_API_TOKEN"],
+            token=active_key, # Explicitly pass key
             temperature=0.1,
             max_new_tokens=512
         )
@@ -442,10 +497,10 @@ with tabs[0]:
                         
                         result = live_qa_chain.invoke({"query": live_question})
                         
-                        st.markdown("### 🤖 Analysis Result")
+                        st.markdown("### Analysis Result")
                         st.markdown(result['result'])
                         
-                        with st.expander("📄 View Source Excerpts"):
+                        with st.expander("View Source Excerpts"):
                             for i, doc in enumerate(result['source_documents'], 1):
                                 st.markdown(f"**Excerpt {i}:**")
                                 st.text(doc.page_content)
