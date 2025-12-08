@@ -4,6 +4,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
+from streamlit_autorefresh import st_autorefresh
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from langchain.llms.base import LLM
@@ -74,6 +75,10 @@ st.markdown("""
     <span class='main-header'>ToS Analyzer</span>
 </div>
 """, unsafe_allow_html=True)
+
+# Run the autorefresh about every 5 minutes (300000 milliseconds)
+# to keep the session active and prevent the app from going to sleep.
+st_autorefresh(interval=300000, key="keepalive")
 
 st.markdown("""
 <div style='text-align: center; margin-bottom: 2rem;'>
